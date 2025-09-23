@@ -88,13 +88,14 @@ userSchema.methods.generateAccessToken = function () {
         {
             // info we need in the payload ->
             _id: this._id,
+            // below info is for study and example
             email: this.email,
             username: this.username,
             fullName: this.fullName
         },
         process.env.ACCESS_TOKEN_SECRET,
         {
-            expiresIn: ACCESS_TOKEN_EXPIRY
+            expiresIn: process.env.ACCESS_TOKEN_EXPIRY
         }
     )
 }
@@ -105,9 +106,9 @@ userSchema.methods.generateRefreshToken = function () {
             // it has less info than access tokens
             _id: this._id,
         },
-        process.env.REFFRESH_TOKEN_SECRET,
+        process.env.REFRESH_TOKEN_SECRET,
         {
-            expiresIn: REFFRESH_TOKEN_EXPIRY
+            expiresIn: process.env.REFRESH_TOKEN_EXPIRY
         }
     )
 }

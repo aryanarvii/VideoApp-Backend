@@ -17,10 +17,11 @@ const uploadOnCloudinary = async (localFilePath) =>
             }
 
             const response = await cloudinary.uploader.upload(localFilePath, {
-                resource_type: auto
+                resource_type: "auto"
             })
             // file has been successfully uploaded
-            console.log("file is uploaded on cloudinary", response.url); // HW -> study response object
+            //console.log("file is uploaded on cloudinary", response.url); // HW -> study response object
+            fs.unlinkSync(localFilePath) // remove the local copy
             return response; // here we are returning whole response for study but we should only pass response.url !!
             // after successfull upload we should remove the locally stored files
             

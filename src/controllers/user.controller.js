@@ -4,6 +4,26 @@ import {ApiResponse} from "../utils/ApiResponse.js"
 import {User} from "../models/user.model.js"
 import { uploadOnCloudinary } from "../utils/cloudinary.js";
 
+const generateAccessAndRefreshTokens = async (userId) => {
+    try {
+        
+        const user = await User.findById(userId)
+        
+        const accessToken = user.generateAccessToken()
+        const refreshToken = user.generateRefreshToken()
+
+        // we save the refreshToken in the user's DB
+        user.refreshToken = refreshToken
+        // saving the new changes
+        await user.save({ validateBeforeSave: false}) // validation is false to avoid password verification for this
+
+        return {accessToken, refreshToken}
+        
+    } catch (error) {
+        throw new ApiError(500, "Something went wrong while generating Access and Refresh tokens")
+    }
+}
+
 const registerUser = asyncHandler( async(req, res) => {
     // 1. get user details from the frontend
     const {fullName, email, username, password} = req.body
@@ -45,7 +65,7 @@ const registerUser = asyncHandler( async(req, res) => {
     // here we are finding either username or email of the user
     // we can also find using just one property
 
-    const existedUser = User.findOne({  // method returns reference of the existing user
+    const existedUser = await User.findOne({  // method returns reference of the existing user
         $or: [{ email }, { username }] // PRO SYNTAX
     })
 
@@ -54,11 +74,20 @@ const registerUser = asyncHandler( async(req, res) => {
     }
 
     // 4. Check for compulsory data, like check for avatar and check for images
-    
     const avatarLocalPath = req.files?.avatar[0]?.path;  // extracting local path which is used by the multer to store the file
     console.log(req.files)
 
-    const coverImageLocalPath = req.files?.coverImage[0]?.path;
+     //const coverImageLocalPath = req.files?.coverImage[0]?.path;  <- // this syntax will create issue as we do not know that the coverImage is present or if present, is it an array or not
+     // so use the following to check
+
+    let coverImageLocalPath; // scope issues ke liye 'let' also 'const' value needs to be initiated while declaring
+    // check:
+    // 1. whether we have the coverImage file? -> req.files
+    // 2. is the coverImage file an Array or not (multer makes it)
+    // 3. if it is an array it has length > 0
+    if(req.files && Array.isArray(req.files.coverImage) && req.files.coverImage.length > 0){
+        coverImageLocalPath = req.files.coverImage[0].path;
+    }
 
     if(!avatarLocalPath){
         throw new ApiError(400, "Avatar file is required")
@@ -101,7 +130,7 @@ const registerUser = asyncHandler( async(req, res) => {
     // by default mongodb adds an '_id' field to each new entry 
 
     // 8. remove (password and refresh token field) from response --- handled above
-    const createdUser = User.findById(user._id).select(" -password -refreshToken")
+    const createdUser = await User.findById(user._id).select(" -password -refreshToken")
 
     // 9. Check has user created successfully or received null in response
     if(!createdUser){
@@ -115,4 +144,110 @@ const registerUser = asyncHandler( async(req, res) => {
     )
 } )
 
-export {registerUser}
+
+const loginUser = asyncHandler( async(req, res) => {
+
+    // 1. get data from req.body to analyse and process
+    const {email, username, password} = req.body
+    
+    // 2. username or email based login
+    if (!(username || email )){
+        throw new ApiError(400, "email or username is required")
+    }
+
+    // 3. find if the user exists
+
+    const user = await User.findOne({
+        $or: [{email}, {username}]
+    })
+    // Note: 
+    // 1. in the 'user', the refresh tokens are empty right not!
+    // 2. the 'user' has password and refresh token fields which we do not want to sent in the response, so we should remove it
+
+    if(!user){
+        throw new ApiError(404, "User does not exist")
+    }
+
+    // 4. check correct password
+    const isPasswordValid = await user.isPasswordCorrect(password)    // NOTE:- we call this Fn on 'user' not on 'User'
+
+    if(!isPasswordValid){
+        throw new ApiError(401, "Invalid user credentials")
+    }
+
+    // 5. generate access and refresh tokens
+    const {accessToken, refreshToken} = await generateAccessAndRefreshTokens(user._id)  // method at the top of this file
+
+    // since we have made changes to the user's tokens, we either need to get a fresh 'user' from the DB with latest values or we can simply update fields of the current refrence 'user'
+
+    // getting fresh 'user' needs a DB query which can be expensive, so choose according to your needs
+    // do not save password and refresh token
+    const loggedInUser = await User.findById(user._id).select(
+        "-password -refreshToken"
+    )
+
+    // setting options for cookies
+    const options = {
+        httpOnly: true,
+        secure: true
+    }
+
+    // 6. send cookies containing tokens
+    return res
+            .status(200)
+            .cookie("accessToken", accessToken, options)
+            .cookie("refreshToken", refreshToken, options)
+            .json(
+                new ApiResponse(
+                    200,
+                    {
+                        // data we send in response
+                        user : loggedInUser, 
+                        accessToken, // accessToken: accessToken    --> since both key and value names are same, we can just write value
+                        refreshToken // refreshToken: refreshToken
+                    },
+                    "User logged In Successfully"
+                )
+            )
+
+    
+})
+
+const logoutUser = asyncHandler( async(req, res) => {
+    // implementing the 'auth' middleware, we have added the user into the req
+    // now we know details of the current user to logout
+    await User.findByIdAndUpdate(    // this functtion finds and update in one go
+        req.user._id,
+        // update we need ->
+        {
+            $set:{
+                refreshToken: undefined
+            }
+        },
+        {
+            new: true   // indicates DB is updated
+        }
+
+    ) 
+
+    // setting options for cookies
+    const options = {
+        httpOnly: true,
+        secure: true
+    }
+
+    // for logout we need to clear cookies too
+
+    return res
+    .status(200)
+    .clearCookie("accessToken", options)
+    .clearCookie("refreshToken", options)
+    .json( new ApiResponse(200, {}, "User Logged Out"))
+})
+
+export {
+    registerUser,
+    loginUser,
+    logoutUser
+
+}

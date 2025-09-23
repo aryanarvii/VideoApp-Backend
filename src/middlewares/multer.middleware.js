@@ -20,4 +20,5 @@ const storage = multer.diskStorage({
 // const upload = multer({ storage: storage })
 // Since key and value are same named, we can write this line as ->
 
-export const upload = multer({ storage })
+export const upload = multer({ storage, })
+
