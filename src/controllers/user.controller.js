@@ -13,7 +13,7 @@ const generateAccessAndRefreshTokens = async (userId) => {
         const accessToken = user.generateAccessToken()
         const refreshToken = user.generateRefreshToken()
 
-        // we save the refreshToken in the user's DB
+        // we save a copy of the refreshToken in the user's DB for our verification
         user.refreshToken = refreshToken
         // saving the new changes
         await user.save({ validateBeforeSave: false}) // validation is false to avoid password verification for this
