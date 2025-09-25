@@ -77,7 +77,7 @@ const registerUser = asyncHandler( async(req, res) => {
     // 4. Check for compulsory data, like check for avatar and check for images
     const avatarLocalPath = req.files?.avatar[0]?.path;  // extracting local path which is used by the multer to store the file
     console.log(req.files)
-
+    // NOTE:- here we are using 'req.files' -> file in plural because we are accepting multiple files in an array using multer
      //const coverImageLocalPath = req.files?.coverImage[0]?.path;  <- // this syntax will create issue as we do not know that the coverImage is present or if present, is it an array or not
      // so use the following to check
 
@@ -226,7 +226,7 @@ const logoutUser = asyncHandler( async(req, res) => {
             }
         },
         {
-            new: true   // indicates DB is updated
+            new: true   // indicates to send back the new updated info
         }
 
     ) 
@@ -301,10 +301,130 @@ const refreshAccessToken = asyncHandler( async (req, res) => {
     }
 })
 
+const changeCurrentPassword = asyncHandler( async (req, res) => {
+    const {oldPassword, newPassword} = req.body
+
+    // getting the user refrence from the DB using the auth middleware
+    const user = await User.findOne(req.user?._id)
+
+    const isPasswordCorrect = await user.isPasswordCorrect(oldPassword)
+
+    if(!isPasswordCorrect){
+        throw new ApiError(400, "Invalid Old Password")
+    }
+
+    user.password = newPassword
+
+    await user.save({validateBeforeSave: false})
+
+    return res
+    .status(200)
+    .json(new ApiResponse (200, {}, "Password changed successfully"))
+})
+
+
+// while routing for the updateAccountDetails, make sure the user is logged in
+// for this we need middlewares
+// one for logged in secured route
+// 2nd to accept media files to update (in the updateAvatar controller)
+const updateAccountDetails = asyncHandler(async (req, res) => {
+    const {fullName, email} = req.body // just for example
+
+    if(!fullName || !email){
+        throw new ApiError(400, "All fields are required")
+    }
+
+    const user = User.findByIdAndUpdate(
+        req.user?._id,
+        {
+            $set:{
+                fullName, // fullName: fullName
+                email // email: email
+            }
+        },
+        {
+            new: true   // return the updated values
+        }
+
+    ).select("-password")
+
+    return res
+    .status(200)
+    .json(new ApiResponse(200, {}, "Account details updated successfully"))
+
+})
+
+
+const updateUserAvatar = asyncHandler( async (req, res) => {
+    const avatarLocalPath = req.file?.path
+
+    if(!avatarLocalPath){
+        throw new ApiError(400, "Avatar file is missing")
+    }
+
+    const avatar = await uploadOnCloudinary(avatarLocalPath)
+
+    if(!avatar.url){
+        throw new ApiError(400, "Error while uploading Avatar on cloud")
+    }
+
+    const user = await User.findByIdAndUpdate(
+        req.user?._id,
+
+        {
+            $set : {
+                avatar: avatar.url
+            }
+        },
+        {
+            new:true
+        }
+    ).select("-password")
+
+    return res
+    .status(200)
+    .json(new ApiResponse(200, user, "Avatar is updated successfully"))
+})
+
+const updateUserCoverImage = asyncHandler( async (req, res) => {
+    const coverImageLocalPath = req.file?.path
+
+    if(!coverImageLocalPath){
+        throw new ApiError(400, "Cover Image file is missing")
+    }
+
+    const coverImage = await uploadOnCloudinary(coverImageLocalPath)
+
+    if(!coverImage.url){
+        throw new ApiError(400, "Error while uploading Cover Image on cloud")
+    }
+
+    const user = await User.findByIdAndUpdate(
+        req.user?._id,
+
+        {
+            $set : {
+                coverImage: coverImage.url
+            }
+        },
+        {
+            new:true
+        }
+    ).select("-password")
+
+    return res
+    .status(200)
+    .json(new ApiResponse(200, user, "Cover Image is updated successfully"))
+})
+
 export {
     registerUser,
     loginUser,
     logoutUser,
-    refreshAccessToken
+    refreshAccessToken,
+    changeCurrentPassword,
+    updateAccountDetails,
+    updateUserAvatar,
+    updateUserCoverImage
 
 }
