@@ -4,6 +4,7 @@ import {ApiResponse} from "../utils/ApiResponse.js"
 import {User} from "../models/user.model.js"
 import { uploadOnCloudinary } from "../utils/cloudinary.js";
 import jwt from "jsonwebtoken";
+import {v2 as cloudinary} from "cloudinary"
 
 const generateAccessAndRefreshTokens = async (userId) => {
     try {
@@ -334,7 +335,7 @@ const updateAccountDetails = asyncHandler(async (req, res) => {
         throw new ApiError(400, "All fields are required")
     }
 
-    const user = User.findByIdAndUpdate(
+    const user = await User.findByIdAndUpdate(
         req.user?._id,
         {
             $set:{
@@ -367,6 +368,7 @@ const updateUserAvatar = asyncHandler( async (req, res) => {
     if(!avatar.url){
         throw new ApiError(400, "Error while uploading Avatar on cloud")
     }
+
 
     const user = await User.findByIdAndUpdate(
         req.user?._id,
